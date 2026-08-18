@@ -4,7 +4,7 @@
    ========================================================= */
 const CONFIG = {
   // ID Spreadsheet (lihat di URL, antara /d/ dan /edit)
-  SHEET_ID: "GANTI_DENGAN_ID_SPREADSHEET",
+  SHEET_ID: "1cGb-fmrLOKp_NJGis9bhULdE6xYMaxe6FxprpsrCf20",
 
   // Nama tab sheet berisi data master agen
   AGENTS_SHEET: "Agents",
@@ -14,12 +14,12 @@ const CONFIG = {
   VOTES_SHEET: "Votes",
 
   // URL "formResponse" dari Google Form voting (ganti /viewform -> /formResponse)
-  FORM_ACTION_URL: "https://docs.google.com/forms/d/e/GANTI_FORM_ID/formResponse",
+  FORM_ACTION_URL: "https://docs.google.com/forms/d/e/1FAIpQLSdZq_uLuOtcGWjd7U8Ebj3L0YQ-xWXbcLemCJWYIZgabtU8Bw/formResponse",
 
   // entry.xxxxxxxx untuk tiap pertanyaan di Form (lihat README cara ambilnya)
-  ENTRY_NIP: "entry.GANTI_NIP",
-  ENTRY_AGENT_ID: "entry.GANTI_AGENT_ID",
-  ENTRY_AGENT_NAME: "entry.GANTI_AGENT_NAME", // opsional, boleh dikosongkan ""
+  ENTRY_NIP: "entry.1478650977",
+  ENTRY_AGENT_ID: "entry.914290983",
+  ENTRY_AGENT_NAME: "", // opsional, boleh dikosongkan ""
 };
 
 const LS_VOTER_KEY = "agenPerubahan_voterNip";
