@@ -202,6 +202,9 @@ function bindVoterUI() {
     els.voterNipInput.focus();
   });
   els.voterCancelBtn.addEventListener("click", () => (els.voterModal.hidden = true));
+  els.voterModal.addEventListener("click", (e) => {
+    if (e.target === els.voterModal) els.voterModal.hidden = true;
+  });
   els.voterSaveBtn.addEventListener("click", () => {
     const nip = els.voterNipInput.value.trim();
     if (!nip) {
@@ -256,7 +259,27 @@ function bindConfirmUI() {
     pendingAgent = null;
   });
   els.confirmSendBtn.addEventListener("click", submitVote);
+
+  // Klik di area gelap (backdrop) di luar kotak modal juga menutup modal
+  els.confirmModal.addEventListener("click", (e) => {
+    if (e.target === els.confirmModal && !els.confirmSendBtn.disabled) {
+      els.confirmModal.hidden = true;
+      pendingAgent = null;
+    }
+  });
 }
+
+// Tombol Escape menutup modal mana pun yang sedang terbuka
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (!els.confirmModal.hidden && !els.confirmSendBtn.disabled) {
+    els.confirmModal.hidden = true;
+    pendingAgent = null;
+  }
+  if (!els.voterModal.hidden) {
+    els.voterModal.hidden = true;
+  }
+});
 
 async function submitVote() {
   if (!pendingAgent) return;
@@ -297,6 +320,7 @@ async function submitVote() {
     refreshVoterBar();
     await loadAll();
   } catch (err) {
+    els.confirmModal.hidden = true;
     showStatus("Terjadi kesalahan saat mengirim suara. Coba lagi.", "error");
     console.error(err);
   } finally {
