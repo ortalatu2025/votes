@@ -1,86 +1,113 @@
 # Voting Agen Perubahan
 
-Halaman web untuk voting Agen Perubahan. Data agen (foto, nama, NIP, link
-proposal) dan hasil voting disimpan di Google Sheets. Halaman ini statis
-(HTML/CSS/JS) sehingga bisa di-hosting gratis di GitHub Pages, lalu
+Halaman voting statis (HTML/CSS/JS) yang datanya (foto, nama, NIP, link
+proposal, dan hasil vote) tersimpan di Google Sheets — **tanpa Apps
+Script, tanpa server sendiri**. Cukup di-hosting di GitHub Pages lalu
 disematkan (embed) ke Google Sites.
 
-**Arsitektur singkat:**
+**Arsitektur:**
 
 ```
 Google Sites (embed iframe)
         │
         ▼
-GitHub Pages: index.html + style.css + script.js   ← tampilan & logika
-        │  fetch() GET / POST
-        ▼
-Google Apps Script Web App (Code.gs)                ← "API" perantara
+GitHub Pages: index.html + style.css + script.js
         │
-        ▼
-Google Spreadsheet: sheet "Agents" + sheet "Votes"  ← database
+        ├── GET  → endpoint publik Google Sheets (gviz)   → baca daftar agen & hasil vote
+        └── POST → Google Form "formResponse"              → catat vote baru
+                        │
+                        ▼
+                Google Spreadsheet (sheet Agents + sheet Votes)
 ```
 
-Google Sites tidak bisa langsung membaca/menulis Google Sheets dari
-JavaScript sisi klien (butuh otorisasi OAuth), jadi Apps Script yang
-di-deploy sebagai **Web App** berperan sebagai API sederhana: `doGet`
-untuk mengambil daftar agen, `doPost` untuk mencatat vote.
+> Trade-off yang perlu Anda sadari: karena tidak ada server, cek
+> "NIP sudah pernah vote" dilakukan di sisi browser (baca ulang data
+> sebelum kirim), bukan divalidasi di server. Untuk voting internal ini
+> biasanya cukup, tapi bukan tahan terhadap orang yang sengaja mengirim
+> request manual berulang. Sheet-nya juga harus bisa dibaca "siapa saja
+> yang punya link". Kalau Anda butuh validasi lebih ketat di server,
+> lihat folder `optional-apps-script-alternative/` di akhir dokumen ini.
 
 ---
 
 ## 1. Siapkan Google Spreadsheet
 
-Buat 1 spreadsheet baru dengan 2 sheet (tab):
+Buat 1 spreadsheet baru, isi 1 sheet manual (`Agents`) — sheet kedua
+(`Votes`) akan dibuat otomatis oleh Google Form di langkah 3.
 
-**Sheet `Agents`** — data master, isi manual oleh admin:
+**Sheet `Agents`** (baris 1 = header, urutan kolom harus persis ini):
 
-| ID | Nama         | NIP                 | FotoURL                          | ProposalURL                      |
-|----|--------------|---------------------|-----------------------------------|-----------------------------------|
-| 1  | Budi Santoso | 198501012010011001  | https://drive.google.com/... foto | https://drive.google.com/... pdf |
-| 2  | Siti Amalia  | 199002022012022002  | https://...                       | https://...                       |
+| ID | Nama         | NIP                 | FotoURL            | ProposalURL         |
+|----|--------------|---------------------|---------------------|----------------------|
+| 1  | Budi Santoso | 198501012010011001  | link foto Drive     | link proposal Drive |
+| 2  | Siti Amalia  | 199002022012022002  | link foto Drive     | link proposal Drive |
 
-- `FotoURL` dan `ProposalURL` paling praktis pakai **Google Drive**:
-  upload file → klik kanan → *Get link* → set akses "Anyone with the
-  link" → gunakan link tersebut.
-- Baris 1 harus persis header di atas (urutan kolom penting, dibaca
-  berdasarkan posisi kolom oleh skrip).
+- Untuk `FotoURL`/`ProposalURL`, paling praktis upload ke **Google
+  Drive** → klik kanan file → *Share* → *Get link* → set akses
+  "Anyone with the link" → tempel link itu.
+- **Share spreadsheet ini juga**: klik *Share* → General access →
+  **Anyone with the link → Viewer**. Tanpa ini halaman tidak bisa
+  membaca data.
 
-**Sheet `Votes`** — akan terisi otomatis oleh sistem, cukup buat sheet
-kosong dengan header baris pertama:
+Catat **ID spreadsheet**-nya (bagian URL antara `/d/` dan `/edit`).
 
-| Timestamp | VoterNIP | AgentID | AgentNama |
-|-----------|----------|---------|-----------|
+## 2. Buat Google Form untuk voting
 
-## 2. Deploy Apps Script sebagai Web App
+1. Buka [forms.google.com](https://forms.google.com) → buat form baru,
+   judul bebas mis. "Vote Agen Perubahan".
+2. Tambahkan 2 pertanyaan (tipe **Short answer**, keduanya **Required**):
+   - Pertanyaan 1: `NIP Pemilih`
+   - Pertanyaan 2: `ID Agen`
+   - *(opsional)* Pertanyaan 3: `Nama Agen` — supaya sheet hasil lebih
+     mudah dibaca manusia.
+3. Klik ikon **Responses** (tab di atas) → titik tiga → **Select
+   response destination** → pilih **Select existing spreadsheet** →
+   pilih spreadsheet dari langkah 1. Ini akan membuat tab baru di
+   spreadsheet Anda (biasanya bernama "Form Responses 1").
+4. **Ganti nama tab tersebut menjadi `Votes`** (klik kanan tab di
+   bagian bawah spreadsheet → Rename). Kolomnya otomatis:
+   `Timestamp | NIP Pemilih | ID Agen | (Nama Agen)`.
 
-1. Di spreadsheet: **Extensions → Apps Script**.
-2. Hapus kode default, tempel isi file [`apps-script/Code.gs`](apps-script/Code.gs).
-3. Ganti baris `const SHEET_ID = "GANTI_DENGAN_ID_SPREADSHEET";` dengan
-   ID spreadsheet Anda (bagian di URL antara `/d/` dan `/edit`).
-4. **Deploy → New deployment** → pilih tipe **Web app**.
-   - Description: bebas, mis. "Voting Agen Perubahan"
-   - Execute as: **Me**
-   - Who has access: **Anyone**
-5. Klik **Deploy**, izinkan akses saat diminta, lalu salin **Web app
-   URL** yang muncul (formatnya `https://script.google.com/macros/s/xxx/exec`).
+### Ambil `entry.xxxxx` dan URL formResponse
 
-> Setiap kali Anda mengubah `Code.gs`, gunakan **Manage deployments →
-> Edit → New version** agar perubahan ikut ter-deploy pada URL yang sama.
+1. Di editor Form, klik titik tiga (⋮) di kanan atas → **Get
+   pre-filled link**.
+2. Isi jawaban contoh yang mudah dikenali, misalnya `NIP Pemilih` =
+   `TESTNIP123`, `ID Agen` = `TESTAGENTID`, lalu klik **Get link** →
+   **Copy link**.
+3. Tempel link tadi ke address bar browser, akan terlihat seperti:
+   ```
+   https://docs.google.com/forms/d/e/1FAIpQLSxxxxxxx/viewform?usp=pp_url&entry.111111111=TESTNIP123&entry.222222222=TESTAGENTID
+   ```
+   - `entry.111111111` → ini `ENTRY_NIP` (yang nilainya `TESTNIP123`)
+   - `entry.222222222` → ini `ENTRY_AGENT_ID` (yang nilainya `TESTAGENTID`)
+   - Lakukan hal sama untuk pertanyaan "Nama Agen" jika Anda pakai.
+4. URL untuk mengirim data (**bukan** untuk dibuka di browser) adalah
+   URL yang sama tapi bagian `/viewform` diganti `/formResponse`:
+   ```
+   https://docs.google.com/forms/d/e/1FAIpQLSxxxxxxx/formResponse
+   ```
 
-## 3. Hubungkan frontend ke Apps Script
+## 3. Isi `script.js`
 
-Buka `script.js`, ganti baris pertama:
+Buka `script.js`, lengkapi bagian `CONFIG` di paling atas:
 
 ```js
-const API_URL = "GANTI_DENGAN_URL_WEB_APP_APPS_SCRIPT";
+const CONFIG = {
+  SHEET_ID: "...",              // ID spreadsheet dari langkah 1
+  AGENTS_SHEET: "Agents",
+  VOTES_SHEET: "Votes",
+  FORM_ACTION_URL: "https://docs.google.com/forms/d/e/xxxxx/formResponse",
+  ENTRY_NIP: "entry.111111111",
+  ENTRY_AGENT_ID: "entry.222222222",
+  ENTRY_AGENT_NAME: "entry.333333333", // kosongkan "" jika tidak pakai
+};
 ```
-
-dengan URL Web App dari langkah 2.
 
 ## 4. Publikasikan lewat GitHub Pages
 
 1. Buat repository baru di GitHub, mis. `voting-agen-perubahan`.
-2. Upload/push seluruh isi folder ini (`index.html`, `style.css`,
-   `script.js`, folder `apps-script/` boleh ikut untuk dokumentasi).
+2. Push isi folder ini (`index.html`, `style.css`, `script.js`):
    ```bash
    git init
    git add .
@@ -89,40 +116,45 @@ dengan URL Web App dari langkah 2.
    git remote add origin https://github.com/USERNAME/voting-agen-perubahan.git
    git push -u origin main
    ```
-3. Di repo: **Settings → Pages** → Source: `Deploy from a branch` →
-   Branch: `main` / folder `/ (root)` → Save.
-4. Tunggu ±1 menit, GitHub akan memberi URL publik, formatnya:
+3. **Settings → Pages** → Source: `Deploy from a branch` → Branch:
+   `main` / folder `/ (root)` → Save.
+4. Setelah ±1 menit, GitHub memberi URL publik:
    `https://USERNAME.github.io/voting-agen-perubahan/`
 
 ## 5. Sematkan ke Google Sites
 
-1. Buka Google Sites, edit halaman yang dituju.
+1. Buka Google Sites, edit halaman tujuan.
 2. Panel kanan → **Embed** → **By URL** → tempel URL GitHub Pages dari
    langkah 4 → **Insert**.
-3. Perbesar ukuran kotak embed sesuai kebutuhan (disarankan tinggi
-   minimal 900px agar seluruh grid agen terlihat tanpa scroll ganda).
+3. Perbesar kotak embed (disarankan tinggi ≥ 900px).
 
 ---
 
-## Cara kerja voting & mencegah suara ganda
+## Uji coba sebelum dibagikan
 
-- Pemilih memasukkan **NIP** mereka sendiri lewat tombol "Isi
-  Identitas" (tersimpan di `localStorage` browser).
-- Saat pengiriman vote, Apps Script mengecek sheet `Votes`: jika NIP
-  tersebut sudah pernah tercatat, vote baru ditolak dengan pesan
-  "NIP ini sudah pernah memberikan suara."
-- Setelah vote berhasil, tombol vote di browser tersebut ikut
-  terkunci (`localStorage`) sebagai lapisan tambahan di sisi klien.
-- Catatan: pencegahan ini berbasis NIP yang diketik sendiri oleh
-  pemilih, bukan login terautentikasi. Jika dibutuhkan verifikasi
-  yang lebih ketat (mis. dicocokkan ke daftar pegawai resmi), tambahkan
-  sheet ketiga berisi daftar NIP sah dan validasi tambahan di `doPost`
-  pada `Code.gs`.
+- Buka URL GitHub Pages langsung di browser, isi NIP percobaan, coba
+  vote satu agen, lalu cek apakah baris baru muncul di tab `Votes`
+  pada spreadsheet.
+- Coba vote dengan NIP yang sama sekali lagi — tombol harus terkunci
+  dan muncul pesan bahwa NIP sudah pernah memilih.
 
 ## Kustomisasi cepat
 
-- **Warna & tipografi**: semua di `style.css`, variabel warna ada di
-  bagian `:root` paling atas.
-- **Teks halaman** (judul, deskripsi): langsung di `index.html`.
-- **Jumlah kolom kartu agen**: atur `grid-template-columns` pada
-  `.agent-grid` di `style.css`.
+- **Warna & tipografi**: `style.css`, variabel warna di bagian `:root`.
+- **Teks halaman**: langsung di `index.html`.
+- **Jumlah kolom kartu**: `grid-template-columns` pada `.agent-grid`
+  di `style.css`.
+
+---
+
+## Alternatif: pakai Apps Script (validasi vote ganda di server)
+
+Pendekatan di atas mengecek NIP ganda dari sisi browser. Kalau Anda
+butuh validasi yang benar-benar di server (lebih sulit dimanipulasi),
+folder [`optional-apps-script-alternative/Code.gs`](optional-apps-script-alternative/Code.gs)
+berisi versi backend Apps Script yang bisa dipasang sebagai
+pengganti langkah 2–3 di atas: Apps Script di-deploy sebagai Web App,
+`script.js` memanggil URL Web App itu (GET untuk baca data, POST
+untuk kirim vote), dan Apps Script yang memvalidasi + menulis ke
+sheet. Ini murni opsional — silakan diabaikan jika versi tanpa Apps
+Script sudah cukup.
